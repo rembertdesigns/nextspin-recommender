@@ -3,3 +3,4 @@ spotipy
 scikit-learn
 tqdm
 numpy
+faiss-cpu
