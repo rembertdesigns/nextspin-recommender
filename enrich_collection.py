@@ -1,51 +1,62 @@
 import pandas as pd
 import requests
+import time
 import os
 from dotenv import load_dotenv
 
-# Load env vars
+# Load environment variables
 load_dotenv()
 DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
 
+# Set Discogs API headers
 HEADERS = {
     "User-Agent": "NextSpinVinylApp/1.0",
     "Authorization": f"Discogs token={DISCOGS_TOKEN}"
 }
 
+# Load the collection file
 df = pd.read_csv("data/enriched_collection.csv")
 
-# Add columns if missing
-for col in ["Discogs_Release_ID", "Discogs_MasterID", "Discogs_Want", "Discogs_Have"]:
+# Add or ensure required columns exist
+required_cols = [
+    "Discogs_Release_ID", "Discogs_Title", "Discogs_Year", "Discogs_Thumb",
+    "Discogs_Community_Rating", "Discogs_MasterID", "Discogs_Want", "Discogs_Have"
+]
+for col in required_cols:
     if col not in df.columns:
         df[col] = pd.NA
 
+# Query Discogs API
 for idx, row in df.iterrows():
-    artist = row.get("Artist")
-    title = row.get("Title")
-    if pd.isna(artist) or pd.isna(title):
+    artist = str(row["Artist"]).strip()
+    title = str(row["Title"]).strip()
+
+    if not artist or not title:
         continue
 
     query = f"{artist} {title}"
     print(f"🔍 Searching: {query}")
-    try:
-        r = requests.get(
-            f"https://api.discogs.com/database/search",
-            headers=HEADERS,
-            params={"q": query, "type": "release", "per_page": 1, "page": 1}
-        )
-        if r.status_code != 200:
-            print(f"❌ {query}: {r.status_code}")
-            continue
-        result = r.json()["results"][0]
+    url = f"https://api.discogs.com/database/search?q={query}&type=release&per_page=1&page=1"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print(f"⚠️ Skipping {query}, status: {response.status_code}")
+        continue
 
-        df.at[idx, "Discogs_Release_ID"] = result.get("id", pd.NA)
-        df.at[idx, "Discogs_MasterID"] = result.get("master_id", pd.NA)
-        df.at[idx, "Discogs_Want"] = result.get("community", {}).get("want", pd.NA)
-        df.at[idx, "Discogs_Have"] = result.get("community", {}).get("have", pd.NA)
+try:
+    result = response.json()["results"][0]
+    df.at[idx, "Discogs_Release_ID"] = result.get("id")
+    df.at[idx, "Discogs_Title"] = result.get("title")
+    df.at[idx, "Discogs_Year"] = pd.to_numeric(result.get("year"), errors="coerce")
+    df.at[idx, "Discogs_Thumb"] = result.get("thumb")
+    df.at[idx, "Discogs_Community_Rating"] = result.get("community", {}).get("rating", {}).get("average")
+    df.at[idx, "Discogs_MasterID"] = result.get("master_id")
 
-    except Exception as e:
-        print(f"⚠️ {query} failed: {e}")
+    # ✅ FIX: Indent these properly
+    want_val = result.get("community", {}).get("want")
+    have_val = result.get("community", {}).get("have")
+    df.at[idx, "Discogs_Want"] = int(want_val) if want_val is not None else pd.NA
+    df.at[idx, "Discogs_Have"] = int(have_val) if have_val is not None else pd.NA
 
-df.to_csv("data/enriched_collection.csv", index=False)
-print("✅ Enrichment complete with Discogs_MasterID, Want, and Have counts.")
+except Exception as e:
+    print(f"⚠️ Error processing {query}: {e}")
 
