@@ -36,3 +36,4 @@ models/
 *.json
 data/*.csv
 data/*.json
+.env
