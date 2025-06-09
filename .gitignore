@@ -37,3 +37,4 @@ models/
 data/*.csv
 data/*.json
 .env
+data/enriched_collection.csv
