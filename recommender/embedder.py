@@ -4,20 +4,9 @@ import numpy as np
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from dotenv import load_dotenv
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 
 # Load environment variables from .env
 load_dotenv()
-
-# Authenticate Spotify API using client credentials
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=os.getenv("SPOTIPY_CLIENT_ID"),
-    client_secret=os.getenv("SPOTIPY_CLIENT_SECRET"),
-    redirect_uri=os.getenv("SPOTIPY_REDIRECT_URI"),
-    scope="user-library-read user-read-email"
-))
-
 
 def load_collection(csv_path):
     df = pd.read_csv(csv_path)

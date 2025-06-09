@@ -32,3 +32,27 @@ def search_release(title, artist=None):
         results = response.json().get("results", [])
         return results[0] if results else None
     return None
+
+def get_release_details(release_id):
+    url = f"https://api.discogs.com/releases/{release_id}"
+    response = requests.get(url, headers=HEADERS)
+    time.sleep(1)
+    if response.status_code == 200:
+        return response.json()
+    return None
+
+def get_release_stats(release_id):
+    url = f"https://api.discogs.com/releases/{release_id}/stats"
+    response = requests.get(url, headers=HEADERS)
+    time.sleep(1)
+    if response.status_code == 200:
+        return response.json()
+    return None
+
+def get_master_info(master_id):
+    url = f"https://api.discogs.com/masters/{master_id}"
+    response = requests.get(url, headers=HEADERS)
+    time.sleep(1)
+    if response.status_code == 200:
+        return response.json()
+    return None

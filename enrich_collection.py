@@ -1,68 +1,51 @@
 import pandas as pd
-import time
-from recommender.discogs_client import (
-    search_release,
-    get_release_details,
-    get_release_stats,
-    get_master_info
-)
+import requests
+import os
+from dotenv import load_dotenv
 
-# Load your collection CSV
-df = pd.read_csv("data/sample_collection.csv")
+# Load env vars
+load_dotenv()
+DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
 
-# Add enrichment columns
-df["Discogs_Genre"] = ""
-df["Discogs_Style"] = ""
-df["Discogs_Label"] = ""
-df["Discogs_Year"] = ""
-df["Discogs_CommunityRating"] = ""
-df["Discogs_CommunityVotes"] = ""
-df["Discogs_Have"] = ""
-df["Discogs_Want"] = ""
-df["Discogs_Tracklist"] = ""
-df["Discogs_MasterGenres"] = ""
-df["Discogs_MasterStyles"] = ""
+HEADERS = {
+    "User-Agent": "NextSpinVinylApp/1.0",
+    "Authorization": f"Discogs token={DISCOGS_TOKEN}"
+}
 
-# Loop through and enrich
+df = pd.read_csv("data/enriched_collection.csv")
+
+# Add columns if missing
+for col in ["Discogs_Release_ID", "Discogs_MasterID", "Discogs_Want", "Discogs_Have"]:
+    if col not in df.columns:
+        df[col] = pd.NA
+
 for idx, row in df.iterrows():
-    print(f"🔍 Searching: {row['Artist']} – {row['Title']}")
-    result = search_release(row["Title"], row["Artist"])
+    artist = row.get("Artist")
+    title = row.get("Title")
+    if pd.isna(artist) or pd.isna(title):
+        continue
 
-    if result:
-        df.at[idx, "Discogs_Genre"] = ", ".join(result.get("genre", []))
-        df.at[idx, "Discogs_Style"] = ", ".join(result.get("style", []))
-        df.at[idx, "Discogs_Label"] = ", ".join(result.get("label", []))
-        df.at[idx, "Discogs_Year"] = result.get("year", "")
+    query = f"{artist} {title}"
+    print(f"🔍 Searching: {query}")
+    try:
+        r = requests.get(
+            f"https://api.discogs.com/database/search",
+            headers=HEADERS,
+            params={"q": query, "type": "release", "per_page": 1, "page": 1}
+        )
+        if r.status_code != 200:
+            print(f"❌ {query}: {r.status_code}")
+            continue
+        result = r.json()["results"][0]
 
-        release_id = result.get("id")
-        master_id = result.get("master_id")
+        df.at[idx, "Discogs_Release_ID"] = result.get("id", pd.NA)
+        df.at[idx, "Discogs_MasterID"] = result.get("master_id", pd.NA)
+        df.at[idx, "Discogs_Want"] = result.get("community", {}).get("want", pd.NA)
+        df.at[idx, "Discogs_Have"] = result.get("community", {}).get("have", pd.NA)
 
-        # Get full release details
-        details = get_release_details(release_id)
-        if details:
-            tracklist = [t["title"] for t in details.get("tracklist", [])]
-            df.at[idx, "Discogs_Tracklist"] = " | ".join(tracklist)
-            df.at[idx, "Discogs_CommunityRating"] = details.get("community", {}).get("rating", {}).get("average", "")
-            df.at[idx, "Discogs_CommunityVotes"] = details.get("community", {}).get("rating", {}).get("count", "")
+    except Exception as e:
+        print(f"⚠️ {query} failed: {e}")
 
-        # Get community stats
-        stats = get_release_stats(release_id)
-        if stats:
-            df.at[idx, "Discogs_Have"] = stats.get("have", "")
-            df.at[idx, "Discogs_Want"] = stats.get("want", "")
-
-        # Get master info
-        if master_id:
-            master_info = get_master_info(master_id)
-            if master_info:
-                df.at[idx, "Discogs_MasterGenres"] = ", ".join(master_info.get("genres", []))
-                df.at[idx, "Discogs_MasterStyles"] = ", ".join(master_info.get("styles", []))
-    else:
-        print(f"❌ No match for: {row['Artist']} – {row['Title']}")
-
-    time.sleep(1)  # Respect rate limit
-
-# Save the enriched version
 df.to_csv("data/enriched_collection.csv", index=False)
-print("✅ Enrichment complete. Saved to data/enriched_collection.csv")
+print("✅ Enrichment complete with Discogs_MasterID, Want, and Have counts.")
 
