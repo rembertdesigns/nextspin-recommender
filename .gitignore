@@ -32,9 +32,11 @@ models/
 *.pt
 
 # Data exports
-*.csv
 *.json
-data/*.csv
-data/*.json
+
+# Ignore all data except enriched_collection.csv
+data/*
+!data/enriched_collection.csv
+
+# Secrets
 .env
-data/enriched_collection.csv
